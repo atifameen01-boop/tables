@@ -1,0 +1,1335 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LitTable AI - Narrative Review Table Generator & Citation Placement</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Mammoth.js for client-side Word (.docx) file parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Merriweather:ital,wght@0,300;0,400;0,700;1,300&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        serif: ['Merriweather', 'serif']
+                    },
+                    colors: {
+                        brand: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            800: '#1e40af',
+                            900: '#1e3a8a'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        /* APA 7th Edition Table Styling */
+        .table-apa {
+            border-collapse: collapse;
+            width: 100%;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.875rem;
+            color: #1e293b;
+        }
+        .table-apa th {
+            border-top: 2px solid #0f172a;
+            border-bottom: 1px solid #0f172a;
+            padding: 10px 12px;
+            text-align: left;
+            font-weight: 600;
+            background-color: #f8fafc;
+        }
+        .table-apa td {
+            padding: 10px 12px;
+            border-bottom: none;
+            vertical-align: top;
+        }
+        .table-apa tr:last-child td {
+            border-bottom: 2px solid #0f172a;
+        }
+
+        /* Classic Grid Table Styling */
+        .table-grid {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 0.875rem;
+        }
+        .table-grid th, .table-grid td {
+            border: 1px solid #cbd5e1;
+            padding: 8px 12px;
+            vertical-align: top;
+        }
+        .table-grid th {
+            background-color: #f1f5f9;
+            font-weight: 600;
+        }
+
+        /* Modern Slate Table Styling */
+        .table-slate {
+            border-collapse: separate;
+            border-spacing: 0;
+            width: 100%;
+            font-size: 0.875rem;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #e2e8f0;
+        }
+        .table-slate th {
+            background-color: #1e293b;
+            color: #ffffff;
+            padding: 10px 14px;
+            font-weight: 600;
+            text-align: left;
+        }
+        .table-slate td {
+            padding: 10px 14px;
+            border-bottom: 1px solid #f1f5f9;
+            vertical-align: top;
+        }
+        .table-slate tr:nth-child(even) td {
+            background-color: #f8fafc;
+        }
+
+        /* Inline Cell Editing */
+        .cell-editable {
+            outline: none;
+            transition: all 0.15s ease;
+            border-radius: 4px;
+        }
+        .cell-editable:focus {
+            box-shadow: 0 0 0 2px #3b82f6;
+            background-color: #ffffff !important;
+        }
+
+        /* Citation Highlight pill */
+        .cite-badge {
+            display: inline-block;
+            background-color: #e0e7ff;
+            color: #3730a3;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin: 1px;
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col text-slate-800 antialiased">
+
+    <!-- Top Navigation Header -->
+    <header class="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-30 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="bg-brand-600 p-2 rounded-lg text-white shadow-sm">
+                    <i class="fa-solid fa-table-cells-large text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg leading-tight flex items-center gap-2">
+                        LitTable <span class="bg-brand-500 text-xs px-2 py-0.5 rounded text-white font-medium">AI Synthesizer</span>
+                    </h1>
+                    <p class="text-xs text-slate-400">Narrative Review Citation, Placement & Table Generator</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-3 text-sm">
+                <button id="btn-load-sample" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition flex items-center gap-2 text-xs font-medium">
+                    <i class="fa-solid fa-file-lines text-brand-500"></i> Load Sample Review
+                </button>
+                <button id="btn-show-help" class="text-slate-400 hover:text-white px-2 py-1 transition">
+                    <i class="fa-regular fa-circle-question text-lg"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Workspace Layout -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Left Column: Input & Configuration -->
+        <section class="lg:col-span-5 flex flex-col space-y-5">
+            
+            <!-- Document Source Container -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col flex-1">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="font-semibold text-slate-900 flex items-center gap-2">
+                        <i class="fa-solid fa-file-arrow-up text-brand-600"></i> Manuscript Input
+                    </h2>
+                    <span id="char-count" class="text-xs text-slate-400">0 characters</span>
+                </div>
+
+                <!-- Drag and Drop Upload Area -->
+                <div id="drop-zone" class="border-2 border-dashed border-slate-300 hover:border-brand-500 bg-slate-50 hover:bg-brand-50/30 transition rounded-xl p-4 text-center cursor-pointer mb-3 group">
+                    <input type="file" id="file-input" accept=".docx,.txt,.md" class="hidden">
+                    <i class="fa-solid fa-cloud-arrow-up text-2xl text-slate-400 group-hover:text-brand-600 transition mb-1"></i>
+                    <p class="text-xs font-medium text-slate-700">Drop your manuscript (<span class="text-brand-600 font-semibold">.docx</span>, <span class="text-brand-600 font-semibold">.txt</span>) here</p>
+                    <p class="text-[11px] text-slate-400 mt-0.5">Automated extraction of in-text citations & anchor placement</p>
+                </div>
+
+                <!-- Text Area for direct input or extracted docx text -->
+                <div class="relative flex-1 min-h-[260px] flex flex-col">
+                    <textarea id="text-input" class="w-full flex-1 p-3 text-sm text-slate-800 bg-slate-50/50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none font-sans leading-relaxed" placeholder="Paste your narrative review draft, full text, or upload a .docx file above... Ensure in-text citations (e.g. Smith et al., 2023 or [1]) are included."></textarea>
+                </div>
+
+                <!-- Extracted Citations Preview Badge list -->
+                <div class="mt-3 pt-3 border-t border-slate-100">
+                    <div class="flex items-center justify-between text-xs mb-2">
+                        <span class="font-medium text-slate-600 flex items-center gap-1.5">
+                            <i class="fa-solid fa-quote-right text-brand-600"></i> Detected In-Text Citations:
+                        </span>
+                        <span id="citation-count-badge" class="bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full font-semibold text-[11px]">0 Citations</span>
+                    </div>
+                    <div id="citation-pills-container" class="flex flex-wrap gap-1 max-h-20 overflow-y-auto pr-1 text-xs">
+                        <span class="text-slate-400 italic text-xs">No citations detected yet. Upload or type manuscript text above.</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Synthesis Settings Card -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                <h3 class="font-semibold text-slate-900 text-sm mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-sliders text-slate-500"></i> Table Generation & Placement Options
+                </h3>
+
+                <div class="space-y-4 text-xs">
+                    <div>
+                        <label class="block font-medium text-slate-700 mb-1">Number of Tables to Generate:</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <label class="flex items-center gap-2 p-2 rounded-lg border border-slate-200 bg-slate-50 cursor-pointer hover:bg-slate-100">
+                                <input type="radio" name="table-count" value="2" class="text-brand-600 focus:ring-brand-500">
+                                <div>
+                                    <span class="font-semibold text-slate-800">2 Tables</span>
+                                    <p class="text-[10px] text-slate-500">Summary & Synthesis</p>
+                                </div>
+                            </label>
+                            <label class="flex items-center gap-2 p-2 rounded-lg border border-brand-500 bg-brand-50/40 cursor-pointer">
+                                <input type="radio" name="table-count" value="3" checked class="text-brand-600 focus:ring-brand-500">
+                                <div>
+                                    <span class="font-semibold text-slate-800">3 Tables</span>
+                                    <p class="text-[10px] text-slate-500">Full Systematic Synthesis</p>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block font-medium text-slate-700 mb-1">Review Focus Strategy:</label>
+                        <select id="synthesis-focus" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:ring-2 focus:ring-brand-500">
+                            <option value="standard">Standard Narrative Review (Studies, Outcomes, Themes)</option>
+                            <option value="clinical">Clinical / Intervention Focus (Population, Interventions, Results)</option>
+                            <option value="methodological">Methodological & Quality Focus (Design, Sample, Limitations)</option>
+                            <option value="thematic">Thematic Synthesis (Category, Findings, Citation Mapping)</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block font-medium text-slate-700 mb-1">Custom Table Guidance (Optional):</label>
+                        <input type="text" id="custom-prompt" placeholder="e.g. Include columns for sample size, statistical significance, and AI models..." class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:ring-2 focus:ring-brand-500">
+                    </div>
+                </div>
+
+                <!-- Generate Action Button -->
+                <button id="btn-generate" class="w-full mt-4 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-medium py-2.5 px-4 rounded-lg shadow transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> Synthesize Tables & Citation Anchors
+                </button>
+            </div>
+        </section>
+
+        <!-- Right Column: Interactive Table Workbench & Editor -->
+        <section class="lg:col-span-7 flex flex-col space-y-4">
+
+            <!-- Initial Empty State -->
+            <div id="empty-state" class="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center flex flex-col items-center justify-center min-h-[480px]">
+                <div class="w-16 h-16 bg-brand-50 text-brand-600 rounded-full flex items-center justify-center mb-4 text-2xl shadow-inner">
+                    <i class="fa-solid fa-table-list"></i>
+                </div>
+                <h3 class="text-lg font-bold text-slate-800 mb-1">No Tables Generated Yet</h3>
+                <p class="text-sm text-slate-500 max-w-md mb-6 leading-relaxed">
+                    Upload your narrative review manuscript or click <span class="font-semibold text-slate-700">"Load Sample Review"</span> on top to generate editable, styled synthesis tables complete with exact in-text citation anchors and reference columns.
+                </p>
+                <button id="btn-empty-sample" class="bg-slate-900 hover:bg-slate-800 text-white font-medium text-xs py-2 px-4 rounded-lg transition flex items-center gap-2">
+                    <i class="fa-solid fa-play"></i> Try with Pre-loaded Sample Narrative
+                </button>
+            </div>
+
+            <!-- Loading Spinner State -->
+            <div id="loading-state" class="hidden bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center flex flex-col items-center justify-center min-h-[480px]">
+                <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-brand-200 border-t-brand-600 mb-4"></div>
+                <h3 class="text-base font-bold text-slate-800 mb-1">Analyzing Manuscript, Citations & Text Anchors...</h3>
+                <p id="loading-subtext" class="text-xs text-slate-500">Identifying study characteristics, line numbers, and exact sentence locations for table citations...</p>
+            </div>
+
+            <!-- Active Workbench Container (Hidden by default until generated) -->
+            <div id="workbench-container" class="hidden flex-1 flex flex-col space-y-4">
+                
+                <!-- Table Selection Tabs & Global Controls -->
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3 flex flex-wrap items-center justify-between gap-3">
+                    <div id="table-tabs" class="flex items-center space-x-1 overflow-x-auto pb-1 sm:pb-0">
+                        <!-- Dynamic Tab Buttons inserted via JS -->
+                    </div>
+
+                    <div class="flex items-center space-x-2 text-xs">
+                        <span class="text-slate-400 font-medium">Style:</span>
+                        <select id="style-selector" class="p-1.5 bg-slate-50 border border-slate-200 rounded-md font-medium text-slate-700 focus:ring-1 focus:ring-brand-500">
+                            <option value="apa">APA 7th Edition</option>
+                            <option value="grid">Classic Grid</option>
+                            <option value="slate">Modern Slate</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- NEW: In-Text Placement Recommendation Card -->
+                <div id="placement-card" class="bg-amber-50/90 border border-amber-200 rounded-xl p-4 shadow-sm text-xs text-amber-900 flex flex-col space-y-2">
+                    <div class="flex items-center justify-between font-semibold border-b border-amber-200/80 pb-2 text-amber-950">
+                        <span class="flex items-center gap-2">
+                            <i class="fa-solid fa-location-dot text-amber-600 text-sm"></i>
+                            Exact Manuscript Citation Placement
+                        </span>
+                        <span id="placement-location-badge" class="bg-amber-200/80 text-amber-900 text-[10px] px-2 py-0.5 rounded font-mono font-bold">Line ~4 | Paragraph 1</span>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <p class="text-amber-800">
+                            <strong class="text-amber-950">Anchor Words / Sentence Snippet:</strong> 
+                            <span id="placement-anchor-text" class="font-serif italic bg-amber-100/80 px-1.5 py-0.5 rounded text-amber-900 border border-amber-300/50">"...demonstrating a 94.2% diagnostic accuracy using deep neural networks..."</span>
+                        </p>
+                        
+                        <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+                            <div class="text-[11px] text-amber-800">
+                                <strong>Suggested In-Text Callout:</strong> 
+                                <code id="placement-callout-code" class="bg-white border border-amber-300 font-mono text-amber-900 px-1.5 py-0.5 rounded font-bold">(see Table 1)</code>
+                            </div>
+                            <button id="btn-copy-callout" class="bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-medium px-2.5 py-1 rounded transition flex items-center gap-1 shadow-sm">
+                                <i class="fa-regular fa-copy"></i> Copy Callout Text
+                            </button>
+                        </div>
+                        <p id="placement-reason" class="text-[11px] text-amber-700/90 italic pt-0.5">
+                            Cite this table immediately following the quantitative accuracy comparison of diagnostic algorithms.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Dynamic Editable Table Card -->
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col flex-1 overflow-hidden">
+                    
+                    <!-- Table Header Controls & Title -->
+                    <div class="p-4 border-b border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span id="table-number-badge" class="bg-slate-900 text-white text-[11px] font-bold px-2 py-0.5 rounded">TABLE 1</span>
+                                <h3 id="current-table-title" contenteditable="true" class="font-bold text-slate-900 text-sm hover:bg-slate-100 p-1 rounded transition cursor-pointer" title="Click to edit table title">Summary of Included Literature & Key Synthesis</h3>
+                            </div>
+                            <p id="current-table-desc" contenteditable="true" class="text-xs text-slate-500 mt-1 hover:bg-slate-100 p-1 rounded transition cursor-pointer" title="Click to edit table caption">Overview of study characteristics, methodologies, and cited references.</p>
+                        </div>
+
+                        <!-- Action Toolbar -->
+                        <div class="flex flex-wrap items-center gap-1.5">
+                            <button id="btn-add-row" title="Add Row" class="p-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-md text-xs font-medium transition flex items-center gap-1">
+                                <i class="fa-solid fa-plus text-green-600"></i> Row
+                            </button>
+                            <button id="btn-add-col" title="Add Column" class="p-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-md text-xs font-medium transition flex items-center gap-1">
+                                <i class="fa-solid fa-plus text-blue-600"></i> Column
+                            </button>
+                            <button id="btn-ai-refine" title="Ask AI to refine this table" class="p-1.5 bg-brand-50 border border-brand-200 hover:bg-brand-100 text-brand-700 rounded-md text-xs font-medium transition flex items-center gap-1">
+                                <i class="fa-solid fa-wand-magic"></i> AI Refine
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Scrollable Table Viewport -->
+                    <div class="p-4 overflow-x-auto flex-1 max-h-[520px]">
+                        <div id="table-render-host" class="w-full min-w-[600px]">
+                            <!-- Dynamic Table Rendered Here -->
+                        </div>
+                    </div>
+
+                    <!-- Export & Citation Footer Toolbar -->
+                    <div class="p-3 border-t border-slate-200 bg-slate-50/80 flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <div class="flex items-center gap-2 text-slate-500">
+                            <i class="fa-solid fa-pen-to-square"></i>
+                            <span>Tip: Click any cell, header, or caption to edit inline.</span>
+                        </div>
+
+                        <div class="flex items-center space-x-2">
+                            <button id="btn-copy-word" class="bg-slate-800 hover:bg-slate-900 text-white font-medium px-3 py-1.5 rounded-lg transition flex items-center gap-1.5">
+                                <i class="fa-regular fa-copy"></i> Copy for MS Word
+                            </button>
+                            
+                            <div class="relative inline-block text-left group">
+                                <button class="bg-brand-600 hover:bg-brand-700 text-white font-medium px-3 py-1.5 rounded-lg transition flex items-center gap-1">
+                                    <i class="fa-solid fa-download"></i> Export <i class="fa-solid fa-chevron-down text-[10px] ml-1"></i>
+                                </button>
+                                <div class="hidden group-hover:block absolute right-0 bottom-full mb-1 w-52 bg-white rounded-lg shadow-lg border border-slate-200 z-40 py-1 text-slate-700">
+                                    <button id="export-all-docx" class="w-full text-left px-3 py-1.5 hover:bg-slate-100 flex items-center gap-2 font-semibold text-brand-700 border-b border-slate-100">
+                                        <i class="fa-solid fa-file-word text-brand-600"></i> All Tables (Word .doc)
+                                    </button>
+                                    <button id="export-docx" class="w-full text-left px-3 py-1.5 hover:bg-slate-100 flex items-center gap-2">
+                                        <i class="fa-regular fa-file-word text-blue-600"></i> Current Table (.doc)
+                                    </button>
+                                    <button id="export-csv" class="w-full text-left px-3 py-1.5 hover:bg-slate-100 flex items-center gap-2">
+                                        <i class="fa-solid fa-file-csv text-green-600"></i> Excel / CSV (.csv)
+                                    </button>
+                                    <button id="export-md" class="w-full text-left px-3 py-1.5 hover:bg-slate-100 flex items-center gap-2">
+                                        <i class="fa-brands fa-markdown text-slate-700"></i> Markdown Table
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- Modal: AI Refine Table Prompt -->
+    <div id="modal-refine" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-5 border border-slate-200">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="font-bold text-slate-900 text-sm flex items-center gap-2">
+                    <i class="fa-solid fa-wand-magic-sparkles text-brand-600"></i> Refine Table with AI
+                </h3>
+                <button id="btn-close-refine" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <p class="text-xs text-slate-600 mb-3">Instruct the AI to condense cells, add a missing analytical dimension, format citations, or restyle column contents.</p>
+            <textarea id="refine-prompt-input" rows="3" class="w-full p-2.5 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 resize-none mb-4" placeholder="e.g., Condense the key findings into bullet points and format all reference citations as APA style..."></textarea>
+            <div class="flex justify-end gap-2 text-xs">
+                <button id="btn-cancel-refine" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 font-medium">Cancel</button>
+                <button id="btn-submit-refine" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 rounded-lg text-white font-medium flex items-center gap-1.5">
+                    <i class="fa-solid fa-check"></i> Apply AI Refinement
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Help & Manuscript Citation Tips -->
+    <div id="modal-help" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 border border-slate-200">
+            <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-2">
+                <h3 class="font-bold text-slate-900 text-base flex items-center gap-2">
+                    <i class="fa-solid fa-book-bookmark text-brand-600"></i> LitTable AI User Guide
+                </h3>
+                <button id="btn-close-help" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="space-y-3 text-xs text-slate-600 leading-relaxed max-h-[60vh] overflow-y-auto pr-1">
+                <p class="font-semibold text-slate-800">How LitTable AI Helps Narrative Reviews:</p>
+                <ul class="list-disc pl-4 space-y-1">
+                    <li><strong class="text-slate-700">Citation Extraction:</strong> Automatically detects in-text citations like <code class="bg-slate-100 px-1 rounded">(Smith et al., 2023)</code> or <code class="bg-slate-100 px-1 rounded">[1]</code> and links them directly into dedicated reference columns in generated tables.</li>
+                    <li><strong class="text-slate-700">Exact Citation Placement:</strong> Recommends specific sentence anchor words and approximate line numbers in your draft after which you should cite each table (e.g., <code class="bg-slate-100 px-1 rounded">(see Table 1)</code>).</li>
+                    <li><strong class="text-slate-700">Editable Output:</strong> Every cell, column header, caption, and title is directly editable in real time.</li>
+                    <li><strong class="text-slate-700">Seamless Word Export:</strong> Click <span class="text-brand-600 font-semibold">"Copy for MS Word"</span> and paste directly into Microsoft Word to keep native Word table formatting!</li>
+                </ul>
+                <p class="font-semibold text-slate-800 pt-2 border-t border-slate-100">Supported Formats:</p>
+                <p>Upload <code class="bg-slate-100 px-1.5 py-0.5 rounded text-slate-800">.docx</code> documents directly or paste full draft texts.</p>
+            </div>
+            <div class="mt-5 text-right">
+                <button id="btn-dismiss-help" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-medium">Got it!</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast Element -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white text-xs px-4 py-3 rounded-lg shadow-xl z-50 flex items-center gap-2 transition-all transform translate-y-10 opacity-0 pointer-events-none">
+        <i id="toast-icon" class="fa-solid fa-circle-check text-green-400"></i>
+        <span id="toast-msg">Action completed successfully.</span>
+    </div>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // --- Sample Manuscript Data with Realistic Narrative Review Citations ---
+        const SAMPLE_MANUSCRIPT = `Recent advancements in artificial intelligence (AI) and machine learning (ML) have significantly impacted digital healthcare delivery (Al-Qahtani & Johnson, 2024; Smith et al., 2023). In primary care, predictive algorithms have been utilized for early diagnosis of cardiovascular diseases (Zhang et al., 2023). Zhang et al. (2023) conducted a retrospective cohort study involving 12,450 patients, demonstrating a 94.2% diagnostic accuracy using deep neural networks compared to 86.5% for conventional screening methods. However, implementation barriers such as data privacy concerns and algorithmic bias remain critical challenges (Patel et al., 2022). Patel et al. (2022) surveyed 450 healthcare providers across 15 tertiary hospitals, revealing that 68% of clinicians lacked confidence in AI-driven decision support systems due to a lack of model explainability.
+
+Furthermore, remote patient monitoring systems incorporating wearable IoT sensors have revolutionized chronic disease management (Gomez & Thorne, 2024; Williams et al., 2022). Williams et al. (2022) evaluated a remote monitoring intervention in 320 type 2 diabetes patients over a 12-month period, reporting a significant reduction in HbA1c levels (-1.2%, p < 0.001) and a 35% decrease in hospital readmission rates. Conversely, Gomez and Thorne (2024) highlighted the socio-technical factors affecting user adherence, noting that elderly patients faced usability hurdles that limited long-term engagement. 
+
+Synthesis of these studies underscores the imperative for human-centered AI design and rigorous multi-center clinical validation prior to widespread adoption in clinical workflows (Lee et al., 2023; Al-Qahtani & Johnson, 2024).`;
+
+        // Pre-populated realistic sample table data with explicit placement guidance for immediate preview
+        const SAMPLE_PRESET_TABLES = [
+            {
+                id: "table_1",
+                title: "Summary of AI Diagnostic Studies in Primary Care",
+                description: "Overview of sample sizes, algorithmic accuracy, clinical implementation barriers, and primary citations.",
+                citation_anchor_phrase: "demonstrating a 94.2% diagnostic accuracy using deep neural networks compared to 86.5% for conventional screening methods.",
+                paragraph_or_line: "Paragraph 1, Line ~4",
+                suggested_callout_text: "(see Table 1)",
+                placement_reason: "Insert this callout right after detailing the comparative diagnostic performance of AI deep neural networks versus conventional methods.",
+                headers: ["Author & Year", "Study Design / Sample Size", "AI / Tech Approach", "Key Findings", "Reference / Citation"],
+                rows: [
+                    ["Zhang et al. (2023)", "Retrospective cohort (N = 12,450)", "Deep Neural Networks", "94.2% diagnostic accuracy for cardiovascular disease vs 86.5% conventional.", "Zhang et al., 2023"],
+                    ["Patel et al. (2022)", "Provider survey (N = 450 clinicians)", "Clinical Decision Support", "68% of clinicians cited lack of model explainability as key adoption barrier.", "Patel et al., 2022"]
+                ]
+            },
+            {
+                id: "table_2",
+                title: "Synthesis of Wearable IoT Remote Patient Monitoring Interventions",
+                description: "Clinical outcomes, HbA1c changes, hospital readmission rates, and adherence barriers in chronic disease management.",
+                citation_anchor_phrase: "reporting a significant reduction in HbA1c levels (-1.2%, p < 0.001) and a 35% decrease in hospital readmission rates.",
+                paragraph_or_line: "Paragraph 2, Line ~8",
+                suggested_callout_text: "(Table 2)",
+                placement_reason: "Place this table citation immediately after summarizing clinical trial outcomes for remote diabetes monitoring.",
+                headers: ["Author & Year", "Patient Cohort", "Intervention Type", "Clinical Outcomes & Adherence", "Reference / Citation"],
+                rows: [
+                    ["Williams et al. (2022)", "Type 2 Diabetes (N = 320, 12 months)", "IoT Wearable Sensors", "HbA1c reduced by -1.2% (p < 0.001); 35% decrease in readmissions.", "Williams et al., 2022"],
+                    ["Gomez & Thorne (2024)", "Socio-technical evaluation", "User Adherence Systems", "Identified elderly usability hurdles restricting sustained engagement.", "Gomez & Thorne, 2024"]
+                ]
+            },
+            {
+                id: "table_3",
+                title: "Core Implementation Challenges & Strategic Recommendations",
+                description: "Thematic categorization of clinical, socio-technical, and ethical barriers with corresponding action items.",
+                citation_anchor_phrase: "underscores the imperative for human-centered AI design and rigorous multi-center clinical validation",
+                paragraph_or_line: "Paragraph 3, Line ~12",
+                suggested_callout_text: "(see Table 3 for a synthesis of implementation challenges)",
+                placement_reason: "Cite this thematic synthesis table in the concluding synthesis paragraph before discussing multi-center validation.",
+                headers: ["Domain Category", "Identified Gap / Barrier", "Strategic Recommendation", "Cited Literature"],
+                rows: [
+                    ["Model Explainability", "Clinician skepticism toward black-box decisions", "Incorporate interpretable AI decision dashboards", "Patel et al., 2022"],
+                    ["Elderly Usability", "Accessibility & interface design hurdles", "Adopt human-centered UI design for remote wearables", "Gomez & Thorne, 2024"],
+                    ["Clinical Validation", "Limited multi-center prospective trials", "Mandate multi-site longitudinal validation protocols", "Lee et al., 2023; Al-Qahtani & Johnson, 2024"]
+                ]
+            }
+        ];
+
+        // --- Application State ---
+        let appState = {
+            manuscriptText: '',
+            extractedCitations: [],
+            generatedTables: [],
+            activeTableIndex: 0,
+            tableStyle: 'apa' // 'apa', 'grid', 'slate'
+        };
+
+        // --- DOM Elements ---
+        const textInput = document.getElementById('text-input');
+        const charCount = document.getElementById('char-count');
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const citationPillsContainer = document.getElementById('citation-pills-container');
+        const citationCountBadge = document.getElementById('citation-count-badge');
+        
+        const emptyState = document.getElementById('empty-state');
+        const loadingState = document.getElementById('loading-state');
+        const workbenchContainer = document.getElementById('workbench-container');
+        const tableTabs = document.getElementById('table-tabs');
+        const styleSelector = document.getElementById('style-selector');
+        
+        const tableNumberBadge = document.getElementById('table-number-badge');
+        const currentTableTitle = document.getElementById('current-table-title');
+        const currentTableDesc = document.getElementById('current-table-desc');
+        const tableRenderHost = document.getElementById('table-render-host');
+
+        // Placement UI Elements
+        const placementLocationBadge = document.getElementById('placement-location-badge');
+        const placementAnchorText = document.getElementById('placement-anchor-text');
+        const placementCalloutCode = document.getElementById('placement-callout-code');
+        const placementReason = document.getElementById('placement-reason');
+        const btnCopyCallout = document.getElementById('btn-copy-callout');
+
+        // Buttons
+        const btnGenerate = document.getElementById('btn-generate');
+        const btnLoadSample = document.getElementById('btn-load-sample');
+        const btnEmptySample = document.getElementById('btn-empty-sample');
+        const btnAddRow = document.getElementById('btn-add-row');
+        const btnAddCol = document.getElementById('btn-add-col');
+        const btnAiRefine = document.getElementById('btn-ai-refine');
+        const btnCopyWord = document.getElementById('btn-copy-word');
+
+        // Modals & Toast
+        const modalRefine = document.getElementById('modal-refine');
+        const modalHelp = document.getElementById('modal-help');
+        const toast = document.getElementById('toast');
+
+        // --- Event Listeners Initialization ---
+        window.addEventListener('DOMContentLoaded', () => {
+            setupEventListeners();
+        });
+
+        function setupEventListeners() {
+            // Text area input changes
+            textInput.addEventListener('input', () => {
+                updateTextAnalysis();
+            });
+
+            // File Drag & Drop
+            dropZone.addEventListener('click', () => fileInput.click());
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('border-brand-500', 'bg-brand-50');
+            });
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('border-brand-500', 'bg-brand-50');
+            });
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('border-brand-500', 'bg-brand-50');
+                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    handleFileUpload(e.dataTransfer.files[0]);
+                }
+            });
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files && e.target.files[0]) {
+                    handleFileUpload(e.target.files[0]);
+                }
+            });
+
+            // Sample buttons
+            btnLoadSample.addEventListener('click', loadSampleData);
+            btnEmptySample.addEventListener('click', loadSampleData);
+
+            // Table Generation Trigger
+            btnGenerate.addEventListener('click', generateNarrativeTables);
+
+            // Table Style Selector
+            styleSelector.addEventListener('click', (e) => {
+                appState.tableStyle = e.target.value;
+                renderActiveTable();
+            });
+
+            // Copy Callout button
+            btnCopyCallout.addEventListener('click', () => {
+                const callout = placementCalloutCode.innerText;
+                navigator.clipboard.writeText(callout);
+                showToast(`Copied callout "${callout}" to clipboard!`, 'success');
+            });
+
+            // Table editing controls
+            btnAddRow.addEventListener('click', handleAddRow);
+            btnAddCol.addEventListener('click', handleAddColumn);
+            btnCopyWord.addEventListener('click', copyTableForWord);
+
+            // Export dropdown buttons
+            document.getElementById('export-all-docx').addEventListener('click', exportAllTablesDocx);
+            document.getElementById('export-docx').addEventListener('click', () => exportTable('docx'));
+            document.getElementById('export-csv').addEventListener('click', () => exportTable('csv'));
+            document.getElementById('export-md').addEventListener('click', () => exportTable('md'));
+
+            // AI Refine Modal
+            btnAiRefine.addEventListener('click', () => modalRefine.classList.remove('hidden'));
+            document.getElementById('btn-close-refine').addEventListener('click', () => modalRefine.classList.add('hidden'));
+            document.getElementById('btn-cancel-refine').addEventListener('click', () => modalRefine.classList.add('hidden'));
+            document.getElementById('btn-submit-refine').addEventListener('click', submitAiRefine);
+
+            // Help Modal
+            document.getElementById('btn-show-help').addEventListener('click', () => modalHelp.classList.remove('hidden'));
+            document.getElementById('btn-close-help').addEventListener('click', () => modalHelp.classList.add('hidden'));
+            document.getElementById('btn-dismiss-help').addEventListener('click', () => modalHelp.classList.add('hidden'));
+
+            // Editable title & description sync with state
+            currentTableTitle.addEventListener('blur', () => {
+                if (appState.generatedTables[appState.activeTableIndex]) {
+                    appState.generatedTables[appState.activeTableIndex].title = currentTableTitle.innerText;
+                    updateTabTitleUI();
+                }
+            });
+            currentTableDesc.addEventListener('blur', () => {
+                if (appState.generatedTables[appState.activeTableIndex]) {
+                    appState.generatedTables[appState.activeTableIndex].description = currentTableDesc.innerText;
+                }
+            });
+        }
+
+        // --- File Upload & Mammoth DOCX Parsing ---
+        function handleFileUpload(file) {
+            const fileName = file.name;
+            const ext = fileName.split('.').pop().toLowerCase();
+
+            if (ext === 'docx') {
+                showToast('Parsing Word document...', 'info');
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const arrayBuffer = e.target.result;
+                    mammoth.extractRawText({ arrayBuffer: arrayBuffer })
+                        .then(function(result) {
+                            textInput.value = result.value;
+                            updateTextAnalysis();
+                            showToast('Word document uploaded & parsed!', 'success');
+                        })
+                        .catch(function(err) {
+                            showToast('Failed to parse .docx file.', 'error');
+                            console.error(err);
+                        });
+                };
+                reader.readAsArrayBuffer(file);
+            } else if (ext === 'txt' || ext === 'md') {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    textInput.value = e.target.result;
+                    updateTextAnalysis();
+                    showToast('Text file loaded successfully!', 'success');
+                };
+                reader.readAsText(file);
+            } else {
+                showToast('Please upload a .docx or .txt file.', 'error');
+            }
+        }
+
+        function loadSampleData() {
+            textInput.value = SAMPLE_MANUSCRIPT;
+            updateTextAnalysis();
+
+            // Direct pre-computed synthesis for immediate, rich experience
+            appState.generatedTables = SAMPLE_PRESET_TABLES;
+            appState.activeTableIndex = 0;
+
+            emptyState.classList.add('hidden');
+            loadingState.classList.add('hidden');
+            workbenchContainer.classList.remove('hidden');
+
+            renderTabs();
+            renderActiveTable();
+            showToast('Sample narrative draft & placement recommendations loaded!', 'success');
+        }
+
+        // --- In-Text Citation Detection Logic ---
+        function updateTextAnalysis() {
+            const text = textInput.value;
+            appState.manuscriptText = text;
+            charCount.innerText = `${text.length.toLocaleString()} characters`;
+
+            // Regex pattern to extract in-text citations like (Author et al., 2023), (Smith, 2021; Jones, 2022), [1], [2-4]
+            const parensCitationRegex = /\((?:[A-Z][a-zA-L\s&.,]+(?:\s+et\s+al\.)?,\s*\d{4}[a-z]?(?:\s*;\s*)?)+\)/g;
+            const bracketCitationRegex = /\[\d+(?:\s*[\–\-]\s*\d+)?(?:,\s*\d+)*\]/g;
+
+            let matches = text.match(parensCitationRegex) || [];
+            let bracketMatches = text.match(bracketCitationRegex) || [];
+            
+            let allCitations = [...matches, ...bracketMatches];
+            let uniqueCitations = [...new Set(allCitations)];
+
+            appState.extractedCitations = uniqueCitations;
+
+            // Render citation pills
+            if (uniqueCitations.length === 0) {
+                citationPillsContainer.innerHTML = `<span class="text-slate-400 italic text-xs">No citations detected yet. Ensure in-text citations like (Smith et al., 2023) are present.</span>`;
+                citationCountBadge.innerText = '0 Citations';
+            } else {
+                citationCountBadge.innerText = `${uniqueCitations.length} Citations`;
+                citationPillsContainer.innerHTML = uniqueCitations.map(cite => 
+                    `<span class="cite-badge"><i class="fa-solid fa-quote-left text-[9px] mr-1"></i>${escapeHtml(cite)}</span>`
+                ).join('');
+            }
+        }
+
+        // Helper to locate exact line / paragraph number of an anchor string in the manuscript text
+        function findAnchorLocation(anchorText) {
+            if (!anchorText || !appState.manuscriptText) return "Paragraph 1, Line ~1";
+            
+            const fullText = appState.manuscriptText;
+            const cleanAnchor = anchorText.replace(/^["'\s]+|["'\s]+$/g, '');
+            const index = fullText.indexOf(cleanAnchor);
+
+            if (index === -1) {
+                // Try fuzzy match on short snippet
+                const shortSnippet = cleanAnchor.slice(0, 20);
+                const fuzzyIndex = fullText.indexOf(shortSnippet);
+                if (fuzzyIndex === -1) return "Section Synthesis";
+            }
+
+            const targetIdx = index !== -1 ? index : fullText.indexOf(cleanAnchor.slice(0, 15));
+            if (targetIdx === -1) return "Section Synthesis";
+
+            const textBefore = fullText.substring(0, targetIdx);
+            const lines = textBefore.split('\n');
+            const lineNum = lines.length;
+            const paragraphs = textBefore.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+            const paraNum = Math.max(1, paragraphs.length);
+
+            return `Paragraph ${paraNum}, Line ~${lineNum}`;
+        }
+
+        // --- Gemini API Call for Table Generation ---
+        async function generateNarrativeTables() {
+            const text = textInput.value.trim();
+            if (!text) {
+                showToast('Please enter or upload manuscript text first.', 'error');
+                return;
+            }
+
+            const tableCount = document.querySelector('input[name="table-count"]:checked').value;
+            const focus = document.getElementById('synthesis-focus').value;
+            const customPrompt = document.getElementById('custom-prompt').value.trim();
+
+            // Toggle UI Loading State
+            emptyState.classList.add('hidden');
+            workbenchContainer.classList.add('hidden');
+            loadingState.classList.remove('hidden');
+
+            const systemInstruction = `You are an expert academic research assistant specializing in systematic literature reviews and meta-analyses.
+Your task is to synthesize narrative manuscript drafts into publication-ready structured narrative review tables, AND provide exact manuscript citation placement instructions.
+
+CRITICAL REQUIREMENTS:
+1. Reference Column: Every generated table MUST include a dedicated "Reference / Citation" column listing exact in-text citation(s) (e.g., "Smith et al., 2023" or "[1]").
+2. Citation Placement Anchor: For EACH generated table, you MUST identify the exact sentence anchor words / snippet from the manuscript AFTER WHICH the author should insert the callout (e.g., "(see Table 1)").
+3. You must generate exactly ${tableCount} distinct narrative review tables.
+4. Return ONLY clean structured JSON adhering strictly to the provided JSON Schema. Do NOT include markdown code blocks around the JSON.`;
+
+            const prompt = `Analyze the following manuscript text and generate ${tableCount} comprehensive narrative review tables along with exact in-text citation placement instructions:
+
+Focus Strategy: ${focus}
+Additional Instructions: ${customPrompt || "Ensure key metrics, study parameters, and citations are captured clearly."}
+
+Manuscript Text:
+"""
+${text}
+"""`;
+
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                systemInstruction: { parts: [{ text: systemInstruction }] },
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            tables: {
+                                type: "ARRAY",
+                                items: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        id: { type: "STRING" },
+                                        title: { type: "STRING" },
+                                        description: { type: "STRING" },
+                                        citation_anchor_phrase: { 
+                                            type: "STRING", 
+                                            description: "Exact 8-20 word snippet/phrase directly from the manuscript text after which this table should be cited." 
+                                        },
+                                        paragraph_or_line: { 
+                                            type: "STRING", 
+                                            description: "Estimated line or paragraph number (e.g. Paragraph 1, Line ~5)." 
+                                        },
+                                        suggested_callout_text: { 
+                                            type: "STRING", 
+                                            description: "Exact callout format like (see Table 1) or (Table 2)." 
+                                        },
+                                        placement_reason: { 
+                                            type: "STRING", 
+                                            description: "Short explanation of why this table should be cited after this specific sentence." 
+                                        },
+                                        headers: {
+                                            type: "ARRAY",
+                                            items: { type: "STRING" }
+                                        },
+                                        rows: {
+                                            type: "ARRAY",
+                                            items: {
+                                                type: "ARRAY",
+                                                items: { type: "STRING" }
+                                            }
+                                        }
+                                    },
+                                    required: ["id", "title", "description", "citation_anchor_phrase", "suggested_callout_text", "headers", "rows"]
+                                }
+                            }
+                        },
+                        required: ["tables"]
+                    }
+                }
+            };
+
+            try {
+                const apiKey = "";
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+                const response = await fetchWithRetry(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+
+                if (!jsonText) {
+                    throw new Error("No table data received from API.");
+                }
+
+                const parsedData = JSON.parse(jsonText);
+                if (parsedData.tables && parsedData.tables.length > 0) {
+                    // Enrich calculated line numbers
+                    parsedData.tables.forEach(tbl => {
+                        if (tbl.citation_anchor_phrase) {
+                            tbl.paragraph_or_line = findAnchorLocation(tbl.citation_anchor_phrase);
+                        }
+                    });
+
+                    appState.generatedTables = parsedData.tables;
+                    appState.activeTableIndex = 0;
+
+                    loadingState.classList.add('hidden');
+                    workbenchContainer.classList.remove('hidden');
+
+                    renderTabs();
+                    renderActiveTable();
+                    showToast('Tables & manuscript citation placement anchors generated!', 'success');
+                } else {
+                    throw new Error("Invalid table JSON structure.");
+                }
+
+            } catch (err) {
+                console.error('Error generating tables:', err);
+                loadingState.classList.add('hidden');
+                emptyState.classList.remove('hidden');
+                showToast('Generation failed. Please try again.', 'error');
+            }
+        }
+
+        // --- Fetch Helper with Exponential Backoff ---
+        async function fetchWithRetry(url, options, retries = 3, backoff = 1000) {
+            try {
+                const res = await fetch(url, options);
+                if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+                return res;
+            } catch (err) {
+                if (retries > 0) {
+                    await new Promise(r => setTimeout(r, backoff));
+                    return fetchWithRetry(url, options, retries - 1, backoff * 2);
+                }
+                throw err;
+            }
+        }
+
+        // --- Table Rendering Engine ---
+        function renderTabs() {
+            tableTabs.innerHTML = appState.generatedTables.map((tbl, idx) => `
+                <button onclick="switchTab(${idx})" class="px-3 py-1.5 rounded-lg font-medium text-xs transition flex items-center gap-1.5 ${idx === appState.activeTableIndex ? 'bg-brand-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">
+                    <i class="fa-solid fa-table text-[11px]"></i>
+                    <span>Table ${idx + 1}</span>
+                </button>
+            `).join('');
+        }
+
+        function switchTab(index) {
+            appState.activeTableIndex = index;
+            renderTabs();
+            renderActiveTable();
+        }
+
+        function updateTabTitleUI() {
+            renderTabs();
+        }
+
+        function renderActiveTable() {
+            const currentTable = appState.generatedTables[appState.activeTableIndex];
+            if (!currentTable) return;
+
+            tableNumberBadge.innerText = `TABLE ${appState.activeTableIndex + 1}`;
+            currentTableTitle.innerText = currentTable.title || `Narrative Table ${appState.activeTableIndex + 1}`;
+            currentTableDesc.innerText = currentTable.description || `Summary of literature review key syntheses and citations.`;
+
+            // Update Placement Guidance Panel
+            const locationText = currentTable.paragraph_or_line || findAnchorLocation(currentTable.citation_anchor_phrase);
+            placementLocationBadge.innerText = locationText;
+            placementAnchorText.innerText = `"...${currentTable.citation_anchor_phrase || 'End of relevant synthesis section'}..."`;
+            placementCalloutCode.innerText = currentTable.suggested_callout_text || `(see Table ${appState.activeTableIndex + 1})`;
+            placementReason.innerText = currentTable.placement_reason || `Cite this table after summarizing the studies and findings in this paragraph.`;
+
+            const styleClass = appState.tableStyle === 'apa' ? 'table-apa' :
+                              appState.tableStyle === 'grid' ? 'table-grid' : 'table-slate';
+
+            let tableHtml = `<table class="${styleClass}">
+                <thead>
+                    <tr>
+                        <th style="width: 40px;" class="text-center text-slate-400">#</th>
+                        ${currentTable.headers.map((h, cIdx) => `
+                            <th contenteditable="true" onblur="updateHeader(${cIdx}, this.innerText)" class="cell-editable group relative">
+                                <div class="flex items-center justify-between gap-1">
+                                    <span>${escapeHtml(h)}</span>
+                                    <button onclick="deleteColumn(${cIdx})" title="Delete Column" class="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 text-xs px-1">
+                                        <i class="fa-solid fa-trash-can"></i>
+                                    </button>
+                                </div>
+                            </th>
+                        `).join('')}
+                        <th style="width: 50px;" class="text-center font-normal text-slate-400">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${currentTable.rows.map((row, rIdx) => `
+                        <tr>
+                            <td class="text-center text-slate-400 text-xs font-mono select-none pt-3">${rIdx + 1}</td>
+                            ${row.map((cell, cIdx) => `
+                                <td contenteditable="true" onblur="updateCell(${rIdx}, ${cIdx}, this.innerText)" class="cell-editable">
+                                    ${escapeHtml(cell)}
+                                </td>
+                            `).join('')}
+                            <td class="text-center pt-2">
+                                <button onclick="deleteRow(${rIdx})" title="Delete Row" class="text-slate-300 hover:text-red-500 transition px-1">
+                                    <i class="fa-solid fa-circle-xmark"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>`;
+
+            tableRenderHost.innerHTML = tableHtml;
+        }
+
+        // --- Cell & Data Mutation Handlers ---
+        function updateCell(rowIndex, colIndex, val) {
+            const table = appState.generatedTables[appState.activeTableIndex];
+            if (table && table.rows[rowIndex]) {
+                table.rows[rowIndex][colIndex] = val;
+            }
+        }
+
+        function updateHeader(colIndex, val) {
+            const table = appState.generatedTables[appState.activeTableIndex];
+            if (table && table.headers[colIndex]) {
+                table.headers[colIndex] = val;
+            }
+        }
+
+        function handleAddRow() {
+            const table = appState.generatedTables[appState.activeTableIndex];
+            if (!table) return;
+            const emptyRow = new Array(table.headers.length).fill('Click to edit...');
+            table.rows.push(emptyRow);
+            renderActiveTable();
+            showToast('Added new row to table.', 'success');
+        }
+
+        function handleAddColumn() {
+            const table = appState.generatedTables[appState.activeTableIndex];
+            if (!table) return;
+            const colName = prompt("Enter new column header name:", "New Column");
+            if (!colName) return;
+
+            table.headers.push(colName);
+            table.rows.forEach(row => row.push('N/A'));
+            renderActiveTable();
+            showToast(`Added column "${colName}".`, 'success');
+        }
+
+        function deleteRow(rowIndex) {
+            const table = appState.generatedTables[appState.activeTableIndex];
+            if (!table || table.rows.length <= 1) {
+                showToast('Table must have at least one row.', 'error');
+                return;
+            }
+            table.rows.splice(rowIndex, 1);
+            renderActiveTable();
+            showToast('Row removed.', 'info');
+        }
+
+        function deleteColumn(colIndex) {
+            const table = appState.generatedTables[appState.activeTableIndex];
+            if (!table || table.headers.length <= 1) {
+                showToast('Table must have at least one column.', 'error');
+                return;
+            }
+            table.headers.splice(colIndex, 1);
+            table.rows.forEach(row => row.splice(colIndex, 1));
+            renderActiveTable();
+            showToast('Column removed.', 'info');
+        }
+
+        // --- AI Refinement Modal Submission ---
+        async function submitAiRefine() {
+            const instruction = document.getElementById('refine-prompt-input').value.trim();
+            if (!instruction) {
+                showToast('Please enter refinement instructions.', 'error');
+                return;
+            }
+
+            modalRefine.classList.add('hidden');
+            showToast('Refining table with AI...', 'info');
+
+            const currentTable = appState.generatedTables[appState.activeTableIndex];
+            const systemInstruction = `You are a specialized literature review table editor. Apply the user's specific editing instructions to the provided table structure and return the refined table in JSON format adhering strictly to the schema. Preserve citations and anchor information.`;
+
+            const prompt = `User Refinement Request: "${instruction}"
+
+Current Table JSON:
+${JSON.stringify(currentTable)}`;
+
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                systemInstruction: { parts: [{ text: systemInstruction }] },
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            id: { type: "STRING" },
+                            title: { type: "STRING" },
+                            description: { type: "STRING" },
+                            citation_anchor_phrase: { type: "STRING" },
+                            paragraph_or_line: { type: "STRING" },
+                            suggested_callout_text: { type: "STRING" },
+                            placement_reason: { type: "STRING" },
+                            headers: { type: "ARRAY", items: { type: "STRING" } },
+                            rows: { type: "ARRAY", items: { type: "ARRAY", items: { type: "STRING" } } }
+                        },
+                        required: ["id", "title", "description", "headers", "rows"]
+                    }
+                }
+            };
+
+            try {
+                const apiKey = "";
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+                const response = await fetchWithRetry(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (jsonText) {
+                    const refinedTable = JSON.parse(jsonText);
+                    appState.generatedTables[appState.activeTableIndex] = refinedTable;
+                    renderActiveTable();
+                    showToast('Table successfully refined!', 'success');
+                }
+            } catch (err) {
+                console.error(err);
+                showToast('AI refinement failed.', 'error');
+            }
+        }
+
+        // --- Export & MS Word Clipboard Integrations ---
+        function copyTableForWord() {
+            const currentTable = appState.generatedTables[appState.activeTableIndex];
+            if (!currentTable) return;
+
+            // Generate MS Word-compatible HTML table
+            let htmlString = `
+            <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+            <head>
+                <meta charset="utf-8">
+                <style>
+                    table { border-collapse: collapse; width: 100%; font-family: 'Times New Roman', serif; font-size: 10.5pt; }
+                    th { border-top: 2.0pt solid black; border-bottom: 1.0pt solid black; font-weight: bold; padding: 6pt; text-align: left; }
+                    td { padding: 6pt; vertical-align: top; border-bottom: 0.5pt solid #d3d3d3; }
+                    tr:last-child td { border-bottom: 2.0pt solid black; }
+                    caption { font-weight: bold; text-align: left; margin-bottom: 6pt; font-size: 11pt; }
+                </style>
+            </head>
+            <body>
+                <p><b>Table ${appState.activeTableIndex + 1}</b><br><i>${escapeHtml(currentTable.title)}</i></p>
+                <p style="font-size: 9pt; color: #555;">${escapeHtml(currentTable.description)}</p>
+                <table>
+                    <thead>
+                        <tr>
+                            ${currentTable.headers.map(h => `<th>${escapeHtml(h)}</th>`).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${currentTable.rows.map(r => `
+                            <tr>
+                                ${r.map(cell => `<td>${escapeHtml(cell)}</td>`).join('')}
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </body>
+            </html>`;
+
+            // Write HTML to Clipboard
+            if (navigator.clipboard && window.ClipboardItem) {
+                const blob = new Blob([htmlString], { type: 'text/html' });
+                navigator.clipboard.write([new ClipboardItem({ 'text/html': blob })])
+                    .then(() => {
+                        showToast('Table copied! Paste (Ctrl+V) directly into MS Word.', 'success');
+                    })
+                    .catch(() => {
+                        fallbackCopyText(htmlString);
+                    });
+            } else {
+                fallbackCopyText(htmlString);
+            }
+        }
+
+        function fallbackCopyText(text) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            showToast('Table HTML copied to clipboard.', 'success');
+        }
+
+        function exportTable(format) {
+            const table = appState.generatedTables[appState.activeTableIndex];
+            if (!table) return;
+
+            const filename = `Narrative_Table_${appState.activeTableIndex + 1}`;
+
+            if (format === 'csv') {
+                let csvContent = "data:text/csv;charset=utf-8,";
+                csvContent += [table.headers.map(h => `"${h.replace(/"/g, '""')}"`).join(','), ...table.rows.map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(','))].join('\n');
+                const encodedUri = encodeURI(csvContent);
+                triggerDownload(encodedUri, `${filename}.csv`);
+                showToast('Downloaded CSV file!', 'success');
+            } else if (format === 'md') {
+                let md = `### Table ${appState.activeTableIndex + 1}: ${table.title}\n*${table.description}*\n\n`;
+                md += `**Suggested Citation Location:** ${table.paragraph_or_line || 'In text'} after: *"${table.citation_anchor_phrase || ''}"*\n\n`;
+                md += `| ${table.headers.join(' | ')} |\n`;
+                md += `| ${table.headers.map(() => '---').join(' | ')} |\n`;
+                table.rows.forEach(r => {
+                    md += `| ${r.join(' | ')} |\n`;
+                });
+                const blob = new Blob([md], { type: 'text/markdown' });
+                const url = URL.createObjectURL(blob);
+                triggerDownload(url, `${filename}.md`);
+                showToast('Downloaded Markdown Table!', 'success');
+            } else if (format === 'docx') {
+                let docContent = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+                <head><meta charset="utf-8"><title>${table.title}</title>
+                <style>
+                    table { border-collapse: collapse; width: 100%; font-family: 'Times New Roman', serif; }
+                    th { border-top: 2pt solid black; border-bottom: 1pt solid black; padding: 6px; text-align: left; }
+                    td { border-bottom: 0.5pt solid #ddd; padding: 6px; vertical-align: top; }
+                    tr:last-child td { border-bottom: 2pt solid black; }
+                </style></head>
+                <body>
+                    <h2>Table ${appState.activeTableIndex + 1}: ${table.title}</h2>
+                    <p><i>${table.description}</i></p>
+                    <p style="color:#b45309;"><b>In-Text Citation Placement:</b> Insert ${table.suggested_callout_text || '(see Table)'} in ${table.paragraph_or_line || 'manuscript'} after phrase: <i>"${table.citation_anchor_phrase || ''}"</i></p>
+                    <table>
+                        <thead><tr>${table.headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+                        <tbody>${table.rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody>
+                    </table>
+                </body></html>`;
+                const blob = new Blob([docContent], { type: 'application/msword' });
+                const url = URL.createObjectURL(blob);
+                triggerDownload(url, `${filename}.doc`);
+                showToast('Downloaded MS Word table document!', 'success');
+            }
+        }
+
+        function triggerDownload(url, name) {
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = name;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        // Export All Tables to a Single MS Word Document
+        function exportAllTablesDocx() {
+            if (!appState.generatedTables || appState.generatedTables.length === 0) {
+                showToast('No tables available to export.', 'error');
+                return;
+            }
+
+            let tablesHtml = appState.generatedTables.map((table, idx) => {
+                const placementLoc = table.paragraph_or_line || findAnchorLocation(table.citation_anchor_phrase);
+                return `
+                    <div style="margin-bottom: 28pt; page-break-after: always;">
+                        <p style="font-family: 'Times New Roman', serif; font-size: 12pt; font-weight: bold; margin-bottom: 2pt;">Table ${idx + 1}</p>
+                        <p style="font-family: 'Times New Roman', serif; font-size: 11pt; font-style: italic; margin-top: 0; margin-bottom: 8pt;">${escapeHtml(table.title)}</p>
+                        <p style="font-family: 'Times New Roman', serif; font-size: 9.5pt; color: #475569; margin-bottom: 8pt;">${escapeHtml(table.description)}</p>
+                        <p style="font-family: 'Times New Roman', serif; font-size: 9.5pt; color: #92400e; background-color: #fef3c7; padding: 6pt; border-left: 3pt solid #d97706; margin-bottom: 12pt;">
+                            <b>In-Text Citation Placement:</b> Insert <b>${escapeHtml(table.suggested_callout_text || '(see Table ' + (idx + 1) + ')')}</b> in <i>${escapeHtml(placementLoc)}</i> after anchor phrase: <i>"${escapeHtml(table.citation_anchor_phrase || '')}"</i>
+                        </p>
+                        <table style="border-collapse: collapse; width: 100%; font-family: 'Times New Roman', serif; font-size: 10pt; margin-bottom: 16pt;">
+                            <thead>
+                                <tr>
+                                    ${table.headers.map(h => `<th style="border-top: 2.0pt solid black; border-bottom: 1.0pt solid black; font-weight: bold; padding: 6pt; text-align: left; background-color: #f8fafc;">${escapeHtml(h)}</th>`).join('')}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${table.rows.map(r => `
+                                    <tr>
+                                        ${r.map(cell => `<td style="padding: 6pt; vertical-align: top; border-bottom: 0.5pt solid #cbd5e1;">${escapeHtml(cell)}</td>`).join('')}
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }).join('');
+
+            let docContent = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+            <head><meta charset="utf-8"><title>All Narrative Review Tables</title>
+            <style>
+                body { font-family: 'Times New Roman', serif; padding: 20pt; }
+                table { border-collapse: collapse; width: 100%; font-family: 'Times New Roman', serif; }
+                th { border-top: 2pt solid black; border-bottom: 1pt solid black; padding: 6px; text-align: left; }
+                td { border-bottom: 0.5pt solid #ddd; padding: 6px; vertical-align: top; }
+                tr:last-child td { border-bottom: 2pt solid black; }
+            </style></head>
+            <body>
+                <h1 style="font-size: 18pt; text-align: center; border-bottom: 2pt solid #0f172a; padding-bottom: 8pt; margin-bottom: 20pt;">Complete Narrative Review Tables Synthesis</h1>
+                ${tablesHtml}
+            </body></html>`;
+
+            const blob = new Blob([docContent], { type: 'application/msword' });
+            const url = URL.createObjectURL(blob);
+            triggerDownload(url, `All_Narrative_Review_Tables.doc`);
+            showToast(`Downloaded all ${appState.generatedTables.length} tables as a single Word document!`, 'success');
+        }
+
+        // --- Utility Functions ---
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        function showToast(msg, type = 'info') {
+            const toastMsg = document.getElementById('toast-msg');
+            const toastIcon = document.getElementById('toast-icon');
+
+            toastMsg.innerText = msg;
+            if (type === 'success') {
+                toastIcon.className = 'fa-solid fa-circle-check text-green-400';
+            } else if (type === 'error') {
+                toastIcon.className = 'fa-solid fa-circle-exclamation text-red-400';
+            } else {
+                toastIcon.className = 'fa-solid fa-circle-info text-blue-400';
+            }
+
+            toast.classList.remove('translate-y-10', 'opacity-0', 'pointer-events-none');
+            setTimeout(() => {
+                toast.classList.add('translate-y-10', 'opacity-0', 'pointer-events-none');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
