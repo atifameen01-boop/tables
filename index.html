@@ -166,6 +166,11 @@
             </div>
 
             <div class="flex items-center space-x-3 text-sm">
+                <button id="btn-api-key" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition flex items-center gap-2 text-xs font-medium relative">
+                    <i class="fa-solid fa-key text-amber-400"></i> 
+                    <span>API Key</span>
+                    <span id="api-key-status-dot" class="w-2 h-2 rounded-full bg-red-500 inline-block" title="API Key Required for live AI"></span>
+                </button>
                 <button id="btn-load-sample" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition flex items-center gap-2 text-xs font-medium">
                     <i class="fa-solid fa-file-lines text-brand-500"></i> Load Sample Review
                 </button>
@@ -437,6 +442,45 @@
         </div>
     </div>
 
+    <!-- Modal: Gemini API Key Settings -->
+    <div id="modal-api-key" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 border border-slate-200">
+            <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-900 text-base flex items-center gap-2">
+                    <i class="fa-solid fa-key text-amber-500"></i> Gemini API Key Configuration
+                </h3>
+                <button id="btn-close-api-key" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            
+            <p class="text-xs text-slate-600 mb-4 leading-relaxed">
+                To run live AI synthesis on Vercel, please provide your Google Gemini API key. Your key is stored <strong>locally in your browser</strong> and is never sent to any server other than Google's official API.
+            </p>
+
+            <div class="space-y-3 mb-5">
+                <label class="block text-xs font-semibold text-slate-700">Google Gemini API Key:</label>
+                <div class="relative">
+                    <input type="password" id="input-api-key" placeholder="AIzaSy..." class="w-full p-2.5 text-xs bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 pr-10 font-mono">
+                    <button id="btn-toggle-key-visibility" class="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 text-xs">
+                        <i class="fa-solid fa-eye"></i>
+                    </button>
+                </div>
+                <div class="flex items-center justify-between text-[11px]">
+                    <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" class="text-brand-600 hover:underline flex items-center gap-1 font-medium">
+                        <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i> Get a free Gemini API Key
+                    </a>
+                    <span id="key-saved-badge" class="text-slate-400 italic">Not Saved</span>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-2 text-xs">
+                <button id="btn-clear-key" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg font-medium transition">Clear</button>
+                <button id="btn-save-key" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg font-medium shadow transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-floppy-disk"></i> Save Key
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal: Help & Manuscript Citation Tips -->
     <div id="modal-help" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 border border-slate-200">
@@ -531,7 +575,8 @@ Synthesis of these studies underscores the imperative for human-centered AI desi
             extractedCitations: [],
             generatedTables: [],
             activeTableIndex: 0,
-            tableStyle: 'apa' // 'apa', 'grid', 'slate'
+            tableStyle: 'apa', // 'apa', 'grid', 'slate'
+            apiKey: localStorage.getItem('gemini_api_key') || ''
         };
 
         // --- DOM Elements ---
@@ -542,6 +587,11 @@ Synthesis of these studies underscores the imperative for human-centered AI desi
         const citationPillsContainer = document.getElementById('citation-pills-container');
         const citationCountBadge = document.getElementById('citation-count-badge');
         
+        const modalApiKey = document.getElementById('modal-api-key');
+        const inputApiKey = document.getElementById('input-api-key');
+        const apiKeyStatusDot = document.getElementById('api-key-status-dot');
+        const keySavedBadge = document.getElementById('key-saved-badge');
+
         const emptyState = document.getElementById('empty-state');
         const loadingState = document.getElementById('loading-state');
         const workbenchContainer = document.getElementById('workbench-container');
@@ -611,6 +661,19 @@ Synthesis of these studies underscores the imperative for human-centered AI desi
             btnLoadSample.addEventListener('click', loadSampleData);
             btnEmptySample.addEventListener('click', loadSampleData);
 
+            document.getElementById('btn-api-key').addEventListener('click', openApiKeyModal);
+            document.getElementById('btn-close-api-key').addEventListener('click', () => modalApiKey.classList.add('hidden'));
+            document.getElementById('btn-save-key').addEventListener('click', saveApiKey);
+            document.getElementById('btn-clear-key').addEventListener('click', clearApiKey);
+            
+            document.getElementById('btn-toggle-key-visibility').addEventListener('click', () => {
+                const isPassword = inputApiKey.type === 'password';
+                inputApiKey.type = isPassword ? 'text' : 'password';
+            });
+
+            // Refresh Key indicator state
+            updateApiKeyUI();
+
             // Table Generation Trigger
             btnGenerate.addEventListener('click', generateNarrativeTables);
 
@@ -663,38 +726,47 @@ Synthesis of these studies underscores the imperative for human-centered AI desi
             });
         }
 
-        // --- File Upload & Mammoth DOCX Parsing ---
-        function handleFileUpload(file) {
-            const fileName = file.name;
-            const ext = fileName.split('.').pop().toLowerCase();
+        function openApiKeyModal() {
+            inputApiKey.value = appState.apiKey;
+            modalApiKey.classList.remove('hidden');
+        }
 
-            if (ext === 'docx') {
-                showToast('Parsing Word document...', 'info');
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    const arrayBuffer = e.target.result;
-                    mammoth.extractRawText({ arrayBuffer: arrayBuffer })
-                        .then(function(result) {
-                            textInput.value = result.value;
-                            updateTextAnalysis();
-                            showToast('Word document uploaded & parsed!', 'success');
-                        })
-                        .catch(function(err) {
-                            showToast('Failed to parse .docx file.', 'error');
-                            console.error(err);
-                        });
-                };
-                reader.readAsArrayBuffer(file);
-            } else if (ext === 'txt' || ext === 'md') {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    textInput.value = e.target.result;
-                    updateTextAnalysis();
-                    showToast('Text file loaded successfully!', 'success');
-                };
-                reader.readAsText(file);
+        function saveApiKey() {
+            const key = inputApiKey.value.trim();
+            appState.apiKey = key;
+            if (key) {
+                localStorage.setItem('gemini_api_key', key);
+                showToast('API key saved locally!', 'success');
             } else {
-                showToast('Please upload a .docx or .txt file.', 'error');
+                localStorage.removeItem('gemini_api_key');
+            }
+            updateApiKeyUI();
+            modalApiKey.classList.add('hidden');
+        }
+
+        function clearApiKey() {
+            appState.apiKey = '';
+            inputApiKey.value = '';
+            localStorage.removeItem('gemini_api_key');
+            updateApiKeyUI();
+            showToast('API key cleared.', 'info');
+        }
+
+        function updateApiKeyUI() {
+            if (appState.apiKey) {
+                apiKeyStatusDot.className = 'w-2 h-2 rounded-full bg-emerald-500 inline-block';
+                apiKeyStatusDot.title = 'Gemini API Key Configured';
+                if (keySavedBadge) {
+                    keySavedBadge.innerText = 'Key Configured ✓';
+                    keySavedBadge.className = 'text-emerald-600 font-semibold';
+                }
+            } else {
+                apiKeyStatusDot.className = 'w-2 h-2 rounded-full bg-amber-500 inline-block animate-pulse';
+                apiKeyStatusDot.title = 'API Key Required for live AI synthesis';
+                if (keySavedBadge) {
+                    keySavedBadge.innerText = 'Not Saved';
+                    keySavedBadge.className = 'text-slate-400 italic';
+                }
             }
         }
 
@@ -780,6 +852,13 @@ Synthesis of these studies underscores the imperative for human-centered AI desi
                 return;
             }
 
+            const currentApiKey = appState.apiKey || localStorage.getItem('gemini_api_key');
+            if (!currentApiKey) {
+                showToast('Gemini API Key required for live synthesis. Please enter key or click "Load Sample Review".', 'error');
+                openApiKeyModal();
+                return;
+            }
+
             const tableCount = document.querySelector('input[name="table-count"]:checked').value;
             const focus = document.getElementById('synthesis-focus').value;
             const customPrompt = document.getElementById('custom-prompt').value.trim();
@@ -862,8 +941,7 @@ ${text}
             };
 
             try {
-                const apiKey = "";
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${encodeURIComponent(currentApiKey)}`;
 
                 const response = await fetchWithRetry(apiUrl, {
                     method: 'POST',
@@ -904,7 +982,7 @@ ${text}
                 console.error('Error generating tables:', err);
                 loadingState.classList.add('hidden');
                 emptyState.classList.remove('hidden');
-                showToast('Generation failed. Please try again.', 'error');
+                showToast('API Request failed. Please check your Gemini API key in Settings.', 'error');
             }
         }
 
@@ -1067,6 +1145,13 @@ ${text}
                 return;
             }
 
+            const currentApiKey = appState.apiKey || localStorage.getItem('gemini_api_key');
+            if (!currentApiKey) {
+                showToast('Gemini API key required. Please click "API Key" in navigation.', 'error');
+                openApiKeyModal();
+                return;
+            }
+
             modalRefine.classList.add('hidden');
             showToast('Refining table with AI...', 'info');
 
@@ -1102,8 +1187,7 @@ ${JSON.stringify(currentTable)}`;
             };
 
             try {
-                const apiKey = "";
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${encodeURIComponent(currentApiKey)}`;
 
                 const response = await fetchWithRetry(apiUrl, {
                     method: 'POST',
@@ -1121,7 +1205,7 @@ ${JSON.stringify(currentTable)}`;
                 }
             } catch (err) {
                 console.error(err);
-                showToast('AI refinement failed.', 'error');
+                showToast('AI refinement failed. Check your API key.', 'error');
             }
         }
 
